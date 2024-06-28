@@ -4,6 +4,8 @@ import entrezpy.conduit
 import entrezpy.base.result
 import entrezpy.base.analyzer
 
+email = 'gregorybrooks@gmail.com'
+
 
 class PubmedRecord:
   """Simple data class to store individual Pubmed records. Individual authors will
@@ -150,31 +152,38 @@ class PubmedAnalyzer(entrezpy.base.analyzer.EutilsAnalyzer):
           if elem is not None and elem.text is not None:
             medrec.title = elem.text.strip()
 
-def search(email, num_entries, terms):
-  email = 'gregorybrooks@gmail.com'
-  num_entries = 10
-  terms = 'cancer'
-  apikey = None
 
-  prompt = {'db': 'pubmed', 'term': terms, 'rettype': 'abstract', 'usehistory': True, 'retmax': num_entries}
+def esearch(apikey, prompt):
   a = entrezpy.esearch.esearch_analyzer.EsearchAnalyzer()
   es = entrezpy.esearch.esearcher.Esearcher('esearcher', email, apikey, threads=8)
   a = es.inquire(prompt, analyzer=a)  # this calls e-utilities
   if not a.isSuccess():
     print("\tFailed: Response errors")
     return None
-  if a.isEmpty():
-    print(f"+++\tWARNING: No results for query")
-  # Get the list of uids that the search found
-  idlist = a.get_result().dump()['uid']
+  # Return the list of uids that the search found
+  return a.get_result().dump()['uid']
 
-  c = entrezpy.conduit.Conduit('gregorybrooks@gmail.com')
+
+def fetch(idlist):
+  c = entrezpy.conduit.Conduit(email)
   fetch_pubmed = c.new_pipeline()
   fetch_pubmed.add_fetch({'db':'pubmed', 'id':idlist, 'retmode':'xml'}, analyzer=PubmedAnalyzer())
-  res = c.run(fetch_pubmed).get_result()
-  json_results = "{'pubmed_records':"
+  return c.run(fetch_pubmed).get_result()
+
+
+def search(num_entries, terms):
+  apikey = None
+  prompt = {'db': 'pubmed', 'term': terms, 'rettype': 'abstract', 'usehistory': True, 'retmax': num_entries}
+
+  idlist = esearch(apikey, prompt)
+  if idlist is None:
+    return None
+
+  res = fetch(idlist)
+
   num_entries = len(res.pubmed_records)
   current_entry = 0
+  json_results = "{'pubmed_records':"
   print("PMID","Title","Abstract","Authors","RefCount", "References", "DocumentURL", sep='=')
   for i in res.pubmed_records:
     print("{}={}={}={}={}={}={}".format(res.pubmed_records[i].pmid, res.pubmed_records[i].title,
@@ -192,7 +201,6 @@ def search(email, num_entries, terms):
   return json_results
 
 if __name__ == '__main__':
-  email = 'gregorybrooks@gmail.com'
-  num_entries = 10
+  num_entries = 2
   terms = 'cancer'
-  print(search(email, num_entries, terms))
+  print(search(num_entries, terms))
